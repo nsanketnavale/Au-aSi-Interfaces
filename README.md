@@ -1,4 +1,6 @@
 # au-asi-interfaces
+DOI: https://doi.org/10.5281/zenodo.3723326
+
 This repository contains all the necessary data to recreate our work in the manuscript titled "Vacancy and interstitial interactions with crystal/amorphous, metal/covalent interfaces" - Sanket S. Navale, Michael J. Demkowicz
 
 Interface Structure Files: 
