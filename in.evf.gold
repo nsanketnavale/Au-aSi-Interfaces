@@ -1,0 +1,42 @@
+label		loop_index
+variable 	g file idau.dat
+variable 	atenerofvac file atenerau.dat
+clear
+read_restart	restart.42701.intL111
+reset_timestep	0
+
+# read the MEAM potential for Au & Si from Julien Godet
+pair_style	meam
+pair_coeff	* * /scratch/user/sanket/potentials/ausi/library.meam Au03 SiLee07 /scratch/user/sanket/potentials/ausi/AuSi.meam Au03 SiLee07
+
+
+thermo_style 	custom step atoms ke temp epair emol pe etotal press vol 
+thermo 		0
+variable        e1 equal pe
+min_style	cg
+minimize	0.0 1e-5 1000 1000000
+print		"Initial energy is ${e1}"
+variable	a1 equal ${e1}
+print 		"Energy of atom to be removed is ${atenerofvac}"
+
+group 		au_box type 1
+group		si_box type 2
+group 		vacancy id $g
+
+delete_atoms 	group vacancy compress no
+thermo		50
+
+min_style 	cg
+minimize	0.0 1e-5 10000 1000000
+variable        e2 equal pe
+print		"Final energy is ${e2}"
+
+variable 	a2 equal ${e2}
+variable	evf equal "v_a2-v_a1+v_atenerofvac"
+print		"Vacancy formation energy is ${evf}"
+
+print 		"$g ${evf}" append vacfenau.dat 
+
+next		g
+next		atenerofvac
+jump		in.evf.gold loop_index

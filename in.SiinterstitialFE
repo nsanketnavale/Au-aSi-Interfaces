@@ -1,0 +1,106 @@
+label           loop_index
+variable        x file SipositionsX.dat
+variable        y file SipositionsY.dat
+variable        z file SipositionsZ.dat
+clear
+
+read_restart	restart.42701.intL111	
+reset_timestep	0
+
+# read the MEAM potential for Au & Si from Julien Godet
+pair_style      meam
+pair_coeff      * * /scratch/user/sanket/potentials/ausi/library.meam Au03 SiLee07 /scratch/user/sanket/potentials/ausi/AuSi.meam Au03 SiLee07
+
+# define held parts of system
+region                  inner sphere $x $y $z 10.0 units box side in 
+region                  outer sphere $x $y $z 20.0 units box side in
+
+group			in region inner
+group			out region outer
+group			del subtract all out
+delete_atoms		group del compress no
+group                   hold subtract out in
+
+fix                     1 hold setforce 0.0 0.0 0.0
+
+compute                 csym all centro/atom fcc
+compute                 eng all pe/atom
+
+thermo_style 	custom step atoms ke temp epair emol pe etotal press vol 
+thermo 		10
+variable        e1 equal pe
+min_style	cg
+minimize	0.0 1e-5 10000 1000000
+print		"Initial energy is ${e1}"
+variable	a1 equal ${e1}
+
+variable 	cohesi equal "-4.384"
+
+group 		au type 1
+group		asi type 2
+create_atoms	2 single $x $y $z
+region          stitial sphere $x $y $z 0.1 units box side in
+group		interstitial region stitial
+group           anneal region inner
+
+compute         peng all pe/atom
+compute         keng all ke/atom
+compute		mytemp anneal temp
+compute		disp anneal displace/atom
+
+min_style       cg
+minimize        0.0 1e-5 10000 1000000
+
+thermo_style    custom step atoms ke c_mytemp temp epair emol pe etotal press vol
+thermo		100
+
+variable	settemp equal 300
+timestep	0.001
+reset_timestep  0
+
+# Anneal at RT 
+# Initialize velocities
+velocity                anneal create 10.0 523456 mom yes rot yes loop local dist gaussian
+
+compute                 msd anneal msd com yes
+fix                     21 anneal ave/time 100 1 500 c_msd[4] file msd
+compute                 rdf anneal rdf 100
+fix                     22 anneal ave/time 100 1 500 c_rdf[*] file rdf mode vector
+
+# Heating: Increase temp
+fix                     6 anneal nvt temp 10.0 ${settemp} 0.05
+
+run                     1000
+unfix                   6
+
+# Hold Temperature
+fix                     6 anneal nvt temp ${settemp} ${settemp} 0.05
+
+run                     1000
+unfix                   6
+
+# Cooling cycle
+fix                     6 anneal nvt temp ${settemp} 1e-6 0.05
+
+run                     1000
+unfix                   6
+
+min_style 	cg
+minimize	0.0 1e-5 10000 1000000
+variable        e2 equal pe
+print		"Final energy is ${e2}"
+
+variable 	a2 equal ${e2}
+variable	eif equal "v_a2-v_a1-v_cohesi"
+print		"Interstitial formation energy is ${eif}"
+
+variable 	xnew equal 'xcm(interstitial,x)'
+variable	ynew equal 'xcm(interstitial,y)'
+variable	znew equal 'xcm(interstitial,z)'
+variable 	disp equal 'sqrt((v_xnew-v_x)*(v_xnew-v_x)+(v_ynew-v_y)*(v_ynew-v_y)+(v_znew-v_z)*(v_znew-v_z))'
+print 		"$x $y $z ${xnew} ${ynew} ${znew} ${disp} ${eif}" append interFE.dat 
+
+next		x
+next		y
+next		z
+jump		in.SiinterstitialFE loop_index
